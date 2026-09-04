@@ -47,6 +47,8 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      released: false,
+      releaseAt: GHOST_CONFIG[ g.kind ].releaseDelay,
     } ) ),
   };
 }
@@ -183,9 +185,25 @@ function decideGhost( game, g ) {
   g.dir = best;
 }
 
-function moveGhost( game, g ) {
+function moveGhost( game, g, i ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
+
+  // Pen: el fantasmas espera en su celda oscilando (bobbing) hasta que
+  // game.tick alcanza su releaseAt; entonces sale y se mueve con normalidad.
+  if ( !g.released ) {
+    if ( game.tick >= g.releaseAt ) {
+      g.released = true;
+      g.x = GHOST_STARTS[ i ].x;
+      g.y = GHOST_STARTS[ i ].y;
+    } else {
+      // Bobbing vertical ±0.25, clamp a la celda.
+      const offset = Math.max( -0.25, Math.min( 0.25, Math.sin( game.tick * 0.15 ) * 0.25 ) );
+      g.x = GHOST_STARTS[ i ].x;
+      g.y = GHOST_STARTS[ i ].y + offset;
+      return;
+    }
+  }
 
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
@@ -210,6 +228,8 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.released = false;
+    g.releaseAt = game.tick + GHOST_CONFIG[ g.kind ].releaseDelay;
   } );
 }
 
@@ -220,7 +240,7 @@ function collides( a, b ) {
 function update( game ) {
   game.tick++;
   movePacman( game );
-  game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
+  game.ghosts.forEach( ( g, i ) => moveGhost( game, g, i ) );
 
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
