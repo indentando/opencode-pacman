@@ -51,12 +51,26 @@ const MAZE = MAZE_STR.map( ( row ) => row.split( '' ).map( parseTile ) );
 
 const TUNNEL_ROW = 14;
 const PACMAN_START = { x: 13, y: 23 };
+
+// Tabla de configuracion por kind: retraso de salida de la pen (en frames)
+// y esquina de dispersion (home) a la que ataca durante la fase scatter.
+const GHOST_CONFIG = {
+  chaser:    { releaseDelay: 0,   home: { x: 27, y: 0 }  },
+  predictor: { releaseDelay: 120, home: { x: 0, y: 0 }   },
+  pincer:    { releaseDelay: 300, home: { x: 27, y: 30 } },
+  shy:       { releaseDelay: 540, home: { x: 0, y: 30 }  },
+};
+
+// Un fantasma por kind; el orden fija el color (rojo, cian, rosa, naranja).
 const GHOST_STARTS = [
-  { x: 13, y: 14, kind: 'hunter' }, // dentro de la pen
-  { x: 14, y: 14, kind: 'random' }, // dentro de la pen
+  { x: 13, y: 14, kind: 'chaser' },
+  { x: 14, y: 14, kind: 'predictor' },
+  { x: 13, y: 15, kind: 'pincer' },
+  { x: 14, y: 15, kind: 'shy' },
 ];
 
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
+window.GHOST_CONFIG = GHOST_CONFIG;
 window.GHOST_STARTS = GHOST_STARTS;
