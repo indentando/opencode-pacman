@@ -13,6 +13,10 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 
+// Fases dispersión/caza (~60fps): 420 frames ≈ 7s, 1200 frames ≈ 20s.
+const SCATTER_FRAMES = 420;
+const CHASE_FRAMES = 1200;
+
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
 function createGame() {
@@ -25,6 +29,7 @@ function createGame() {
 
   return {
     state: 'start',
+    tick: 0,
     score: 0,
     lives: 3,
     dotsRemaining: dots,
@@ -110,9 +115,47 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
+// Fase actual del bucle dispersión/caza: scatter primero, luego chase, en bucle.
+function currentPhase( game ) {
+  const cycle = SCATTER_FRAMES + CHASE_FRAMES;
+  return ( game.tick % cycle ) < SCATTER_FRAMES ? 'scatter' : 'chase';
+}
+
+// Objetivo que orienta las decisiones de un fantasma.
+//   chaser    -> celda de Pac-Man
+//   predictor -> 4 celdas por delante de la direccion de Pac-Man
+//   pincer    -> formula Inky, usando al chaser como referencia
+//   shy       -> sin objetivo fijo (null); cuyas decisiones son aleatorias
+// En dispersion (scatter) todos persiguen su esquina (home).
+function ghostTarget( game, g ) {
+  if ( currentPhase( game ) === 'scatter' ) return GHOST_CONFIG[ g.kind ].home;
+
+  const p = game.pacman;
+  const px = Math.round( p.x );
+  const py = Math.round( p.y );
+
+  if ( g.kind === 'chaser' ) return { x: px, y: py };
+
+  if ( g.kind === 'predictor' ) {
+    const d = DIRS[ p.dir ];
+    return { x: px + d.x * 4, y: py + d.y * 4 };
+  }
+
+  if ( g.kind === 'pincer' ) {
+    const chaser = game.ghosts.find( ( o ) => o.kind === 'chaser' ) || g;
+    const d = DIRS[ p.dir ];
+    return {
+      x: ( px + d.x * 2 ) * 2 - chaser.x,
+      y: ( py + d.y * 2 ) * 2 - chaser.y,
+    };
+  }
+
+  return null; // shy: decisiones aleatorias
+}
+
 function decideGhost( game, g ) {
   const grid = game.grid;
-  const p = game.pacman;
+  const target = ghostTarget( game, g );
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
@@ -120,25 +163,24 @@ function decideGhost( game, g ) {
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
-    }
-    g.dir = best;
-  } else {
+  if ( target === null ) {
     g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+    return;
   }
+
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const nx = g.x + d.x;
+    const ny = g.y + d.y;
+    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
+    }
+  }
+  g.dir = best;
 }
 
 function moveGhost( game, g ) {
@@ -176,6 +218,7 @@ function collides( a, b ) {
 }
 
 function update( game ) {
+  game.tick++;
   movePacman( game );
   game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
 
