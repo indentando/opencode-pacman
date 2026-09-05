@@ -13,6 +13,9 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 
+// Pen: y <= 11 => el fantasma ya dejo la pen (la puerta esta en y=12).
+const PEN_EXIT_ROW = 11;
+
 // Fases dispersión/caza (~60fps): 420 frames ≈ 7s, 1200 frames ≈ 20s.
 const SCATTER_FRAMES = 420;
 const CHASE_FRAMES = 1200;
@@ -49,6 +52,7 @@ function createGame() {
       kind: g.kind,
       released: false,
       releaseAt: GHOST_CONFIG[ g.kind ].releaseDelay,
+      exited: false,
     } ) ),
   };
 }
@@ -208,7 +212,14 @@ function moveGhost( game, g, i ) {
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    decideGhost( game, g );
+    // Transito dentro de la pen: navegar recto hacia arriba hasta la puerta,
+    // ignorando scatter/chase. La puerta esta arriba en ambas columnas.
+    if ( g.released && !g.exited ) {
+      g.dir = 'up';
+      if ( g.y <= PEN_EXIT_ROW ) g.exited = true;
+    } else {
+      decideGhost( game, g );
+    }
     if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
   }
 
@@ -230,6 +241,7 @@ function resetPositions( game ) {
     g.dir = 'up';
     g.released = false;
     g.releaseAt = game.tick + GHOST_CONFIG[ g.kind ].releaseDelay;
+    g.exited = false;
   } );
 }
 
