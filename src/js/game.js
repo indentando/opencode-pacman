@@ -13,6 +13,9 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 
+// Pen: y <= 11 => el fantasma ya dejo la pen (la puerta esta en y=12).
+const PEN_EXIT_ROW = 11;
+
 // Fases dispersión/caza (~60fps): 420 frames ≈ 7s, 1200 frames ≈ 20s.
 const SCATTER_FRAMES = 420;
 const CHASE_FRAMES = 1200;
@@ -49,6 +52,7 @@ function createGame() {
       kind: g.kind,
       released: false,
       releaseAt: GHOST_CONFIG[ g.kind ].releaseDelay,
+      exited: false,
     } ) ),
   };
 }
@@ -59,13 +63,14 @@ function aligned( v ) {
 
 // Una celda es muro para el actor dado?
 //   pacman: bloqueado por pared (1) y puerta (3)
-//   ghost:  bloqueado solo por pared (1)
+//   ghost:  bloqueado por pared (1); la puerta (3) es de salida unica: la
+//           cruza en transito (exited=false) pero no reingresa (exited=true).
 function isWall( grid, x, y, actor ) {
   if ( y < 0 || y >= grid.length ) return true;
   if ( x < 0 || x >= grid[ 0 ].length ) return true;
   const v = grid[ y ][ x ];
   if ( v === 1 ) return true;
-  if ( v === 3 && actor === 'pacman' ) return true;
+  if ( v === 3 ) return actor === 'pacman' || actor.exited === true;
   return false;
 }
 
@@ -160,7 +165,7 @@ function decideGhost( game, g ) {
   const target = ghostTarget( game, g );
 
   const options = Object.keys( DIRS ).filter(
-    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
+    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, g )
   );
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
@@ -208,8 +213,15 @@ function moveGhost( game, g, i ) {
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    decideGhost( game, g );
-    if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
+    // Transito dentro de la pen: navegar recto hacia arriba hasta la puerta,
+    // ignorando scatter/chase. La puerta esta arriba en ambas columnas.
+    if ( g.released && !g.exited ) {
+      g.dir = 'up';
+      if ( g.y <= PEN_EXIT_ROW ) g.exited = true;
+    } else {
+      decideGhost( game, g );
+    }
+    if ( !canMove( grid, g.x, g.y, g.dir, g ) ) return;
   }
 
   const d = DIRS[ g.dir ];
@@ -230,6 +242,7 @@ function resetPositions( game ) {
     g.dir = 'up';
     g.released = false;
     g.releaseAt = game.tick + GHOST_CONFIG[ g.kind ].releaseDelay;
+    g.exited = false;
   } );
 }
 
